@@ -1,0 +1,15 @@
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\src\mempool.c
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\rthw.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\rtthread.h
+.\objects\mempool.o: ..\inc\rtconfig.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\rtdebug.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\rtdef.h
+.\objects\mempool.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdarg.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\rtlibc.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\libc/libc_stat.h
+.\objects\mempool.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\objects\mempool.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\time.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\libc/libc_errno.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\rtservice.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\rtm.h
+.\objects\mempool.o: ..\..\..\middlewares\rt-thread\include\rtthread.h

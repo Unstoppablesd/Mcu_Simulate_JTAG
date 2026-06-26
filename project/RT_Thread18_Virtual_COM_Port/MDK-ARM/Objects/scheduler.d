@@ -1,0 +1,15 @@
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\src\scheduler.c
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\rtthread.h
+.\objects\scheduler.o: ..\inc\rtconfig.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\rtdebug.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\rtdef.h
+.\objects\scheduler.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdarg.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\rtlibc.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\libc/libc_stat.h
+.\objects\scheduler.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\objects\scheduler.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\time.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\libc/libc_errno.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\rtservice.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\rtm.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\rtthread.h
+.\objects\scheduler.o: ..\..\..\middlewares\rt-thread\include\rthw.h

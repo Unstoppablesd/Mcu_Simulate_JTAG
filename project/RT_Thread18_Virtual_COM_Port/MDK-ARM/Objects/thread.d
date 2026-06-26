@@ -1,0 +1,15 @@
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\src\thread.c
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\rtthread.h
+.\objects\thread.o: ..\inc\rtconfig.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\rtdebug.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\rtdef.h
+.\objects\thread.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdarg.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\rtlibc.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\libc/libc_stat.h
+.\objects\thread.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\objects\thread.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\time.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\libc/libc_errno.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\rtservice.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\rtm.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\rtthread.h
+.\objects\thread.o: ..\..\..\middlewares\rt-thread\include\rthw.h

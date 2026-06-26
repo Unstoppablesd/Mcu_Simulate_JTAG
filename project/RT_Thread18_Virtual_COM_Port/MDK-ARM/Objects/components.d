@@ -1,0 +1,15 @@
+.\objects\components.o: ..\..\..\middlewares\rt-thread\src\components.c
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\rthw.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\rtthread.h
+.\objects\components.o: ..\inc\rtconfig.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\rtdebug.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\rtdef.h
+.\objects\components.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdarg.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\rtlibc.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\libc/libc_stat.h
+.\objects\components.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\objects\components.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\time.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\libc/libc_errno.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\rtservice.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\rtm.h
+.\objects\components.o: ..\..\..\middlewares\rt-thread\include\rtthread.h
