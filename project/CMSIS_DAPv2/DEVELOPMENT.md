@@ -259,6 +259,193 @@ $ ./openFPGALoader.exe -c cmsisdap -f lm910.fs
 
 ---
 
+## 原理问答
+
+### Q: 为什么 FPGA 可以走 CMSIS-DAP 协议烧录？它不是给 ARM 调试用的吗？
+
+CMSIS-DAP 本质上是一个**通用 JTAG 位操作传输协议**，不限定目标设备类型。
+
+```
+openFPGALoader (PC)
+    │  CMSIS-DAP 协议 (USB HID)
+    │  命令: SWJ_CLK, SWJ_SEQUENCE, JTAG_SEQUENCE
+    ▼
+N32G43x (CMSIS-DAP 固件)
+    │  纯 GPIO 位操作
+    │  TCK 高低、TMS 设置、TDI 输出、TDO 读取
+    ▼
+GW1N FPGA (JTAG 接口)
+```
+
+**CMSIS-DAP 固件只做 3 件事：**
+1. 收到 `JTAG_SEQUENCE` 命令 → 按 TMS 值翻转 TCK，按 TDI 数据输出，捕获 TDO
+2. 收到 `SWJ_SEQUENCE` 命令 → 按 TMS 序列翻转 TCK（导航 TAP 状态机）
+3. 收到 `SWJ_CLK` 命令 → 设置时钟频率
+
+**它不知道也不关心目标是什么芯片。**
+
+**PC 端才是"大脑"** — openFPGALoader 内置了各厂家的 JTAG 编程算法：
+
+```
+Gowin SRAM 烧录序列 (由 openFPGALoader 生成):
+  IR ← 0x11 (配置指令)
+  DR ← 擦除命令
+  IR ← 0x12 (数据指令)
+  DR ← 码流数据 (lm910.fs)
+  IR ← 0x13 (完成指令)
+  DR ← 启动命令
+```
+
+每一步都翻译成 CMSIS-DAP 的 TMS/TDI/TDO 序列，通过 USB 发给固件，固件纯粹"执行"这些 GPIO 操作。
+
+**类比**：CMSIS-DAP 就像 JTAG 的"远程控制"——PC 想怎么翻 TCK/TMS/TDI 都可以，N32G43x 只是个听话的执行器。所以 ARM 单片机、RISC-V、FPGA，只要是 JTAG 接口都能用。
+
+---
+
+### Q: N32G43x 固件具体通过 USB 实现了哪些步骤？
+
+#### 一、USB 层面：让 PC 认识我们
+
+**把自己注册成 HID 设备**（`usb_descriptor.c`）：
+
+PC 插上 USB 线后会问："你是个啥？" 我们回答：
+
+```
+我叫 "CMSIS-DAP v2 (N32G43x)"
+我是 HID 设备（人体学输入设备）
+我有两个数据通道：
+  - 通道 0x02：PC → 我（接收命令）
+  - 通道 0x81：我 → PC（返回结果）
+每个通道一次传 64 字节
+```
+
+**数据收发**（`main.c`）：
+
+```
+PC 发来 64 字节 HID 报告
+    ↓
+CherryUSB 收进缓冲区
+    ↓
+调用 usbd_hid_out_handler()  ← 我们的回调
+    ↓
+解析命令 → 执行操作 → 准备好 64 字节响应
+    ↓
+usbd_ep_write() 发回 PC
+```
+
+#### 二、协议层面：理解 PC 在说什么
+
+PC 通过 USB 发来的是一条条 **CMSIS-DAP 命令**（`dap_main.c`），共 10 种：
+
+| 命令 | 编号 | PC 在说什么 | 我们做什么 |
+|------|------|-------------|------------|
+| `INFO` | 0x00 | "你是谁？支持 JTAG 吗？" | 返回版本号、能力字 |
+| `HOSTSTATUS` | 0x01 | "我连上了/断开了" | 确认收到 |
+| `CONNECT` | 0x02 | "启动 JTAG，准备干活" | 初始化 GPIO，复位 TAP |
+| `DISCONNECT` | 0x03 | "干完了，收工" | 标记断开 |
+| `WRITE_ABORT` | 0x08 | "紧急停止当前操作" | 确认（当前为空操作） |
+| `DELAY` | 0x09 | "等 X 微秒" | 软件延时 |
+| `RESET_TARGET` | 0x0A | "复位目标芯片" | 拉低 SRST，等 10ms，释放 |
+| `SWJ_CLK` | 0x11 | "JTAG 时钟跑 X MHz" | 设置 NOP 延迟参数 |
+| `SWJ_SEQUENCE` | 0x12 | "按这些 TMS 值翻转 TCK" | 纯 GPIO 翻转 |
+| `JTAG_SEQUENCE` | 0x14 | "TMS=X, TDI=数据, 捕获 TDO 返回" | GPIO 翻转 + 读 TDO |
+
+#### 三、物理层面：用 GPIO 模拟 JTAG
+
+这是最核心的工作（`jtag_driver.c` + `dap_main.c` 里的 bit-banging 循环）：
+
+**例：PC 要读 FPGA 的 IDCODE**
+
+PC 发来一串命令序列：
+
+```
+步骤1: SWJ_SEQUENCE { TMS: 1,1,1,1,1, 0, 1,0,0 }  ← 9 个 TCK
+       含义：复位 TAP → 进入 Shift-DR
+
+步骤2: JTAG_SEQUENCE { TMS=0, TDI=全1, 发送32个TCK, 捕获TDO }
+       含义：在 Shift-DR 状态移动 32 位，读回 TDO
+```
+
+**步骤1 代码做的事：**
+
+```c
+for 每个 TMS bit:
+    if (TMS_bit == 1) PB4 输出高;
+    else              PB4 输出低;
+
+    延时;              // 等信号稳定
+    PB3 输出高;        // TCK 上升沿（FPGA 采样 TMS）
+    延时;
+    PB3 输出低;        // TCK 下降沿
+```
+
+**步骤2 代码做的事：**
+
+```c
+for 32 次:
+    if (TDI_bit == 1) PB5 输出高;  // 设置 TDI
+    else              PB5 输出低;
+
+    PB4 输出低;  // TMS=0（保持在 Shift-DR）
+
+    延时;
+    PB3 输出高;  // TCK 上升沿
+    延时;
+
+    读 PB6 引脚 → 这是 TDO，FPGA 从 IDCODE 寄存器移出的 1 bit
+    存入响应缓冲区
+
+    PB3 输出低;  // TCK 下降沿
+```
+
+32 次循环后，响应缓冲区就有 4 字节：`1B 68 20 01`，发回 PC，PC 算出 `0x0120681B` = GW1N-2。
+
+#### 四、数据流全景
+
+```
+PC (openFPGALoader)
+  │  "读 IDCODE" 翻译成 TMS + TDI bit 序列
+  │  打包成 CMSIS-DAP JTAG_SEQUENCE 命令
+  │
+  ▼ USB HID 64 字节包
+┌──────────────────────────┐
+│  N32G43x 固件             │
+│                          │
+│  CherryUSB 收到数据       │
+│       ↓                  │
+│  usbd_hid_out_handler()  │ ← main.c
+│       ↓                  │
+│  dap_process_command()   │ ← dap_main.c (协议)
+│       ↓                  │
+│  根据 cmd 编号分派:       │
+│    0x14 → JTAG_SEQUENCE  │
+│       ↓                  │
+│  for 每 bit:             │
+│    设 PB5 (TDI)           │
+│    设 PB4 (TMS)           │
+│    翻 PB3 (TCK)           │
+│    读 PB6 (TDO)           │ ← 纯 GPIO 操作
+│       ↓                  │
+│  收集 32 bit → 4 字节     │
+│       ↓                  │
+│  usbd_ep_write() 回 PC   │ ← 64 字节 HID 报告
+└──────────────────────────┘
+  │
+  ▼ USB HID 64 字节包
+PC (openFPGALoader)
+  │  收到 TDO 字节 → 算出 IDCODE
+  │  匹配数据库 → "GW1N-2"
+  │
+  │  继续发更多的 JTAG 命令...
+  │  (擦除 SRAM → 写码流 → CRC 校验)
+  ▼
+烧录完成 ✅
+```
+
+**一句话总结**：N32G43x 就是一个 **USB 转 GPIO 的桥**。不缓存、不解析目标芯片、不知道 JTAG 状态机——那些全是 PC 端的活。
+
+---
+
 ## 经验教训
 
 1. **调试时加 UART 日志非常关键** — 打印原始 TDO 字节直接揭示了偏移问题
@@ -266,3 +453,75 @@ $ ./openFPGALoader.exe -c cmsisdap -f lm910.fs
 3. **索引/偏移 bug 最难找** — `resp_idx` 从 2 开始但 `resp_data` 指向 `resp_buffer+2`，双重偏移
 4. **HID vs WinUSB** — 不同工具支持不同的 CMSIS-DAP 传输层，openFPGALoader 只支持 HID
 5. **时钟公式需要校准** — 软件 NOP 延迟要计入循环开销（不是 1 cycle/NOP）
+
+---
+
+## TODO / 待办事项
+
+### 高优先级
+
+- [ ] **USB 回调线程化** — 目前 `usbd_hid_out_handler` 在中断/UAC 回调上下文中直接处理 CMSIS-DAP 命令（含 JTAG 位操作），可能阻塞 USB 中断。改为信号量通知独立线程：
+
+```
+当前架构：
+  USB 中断 → usbd_hid_out_handler → dap_process_command (含 GPIO 操作)
+
+改进架构：
+  USB 中断 → usbd_hid_out_handler → 收数据 → rt_sem_release()
+  dap_thread → rt_sem_take() → dap_process_command (GPIO 在线程上下文)
+```
+
+- [ ] **LED 指示线程** — 添加连接状态 LED（PB 其他引脚或 PA8）
+- [ ] **烧录速度优化** — 当前 ~100kHz JTAG，SRAM 466 字节用时正常，大码流可能需要提速
+
+### 低优先级
+
+- [ ] **SWD 支持** — 当前仅 JTAG，添加 SWD 可兼容更多 ARM 目标
+- [ ] **CMSIS-DAP v1 HID 模式** — 兼容旧版工具
+- [ ] **pyOCD / OpenOCD 兼容性测试**
+- [ ] **openFPGALoader IDCODE 字节序 bug 上报** — `0x681B0002` vs `0x0120681B` 是固件 bug，已修复，可向 openFPGALoader 提交 Gowin IDCODE 补充（如果需要）
+
+---
+
+## RT-Thread 学习路径
+
+> 基于本项目已有的 RT-Thread 使用经验，推荐学习路径如下。
+
+### 已掌握 ✓
+
+- `board.c` — SysTick 心跳、堆内存设置、中断向量表
+- `rtconfig.h` — 内核裁剪
+- `rt_thread_init()` + `rt_thread_startup()` — 静态线程创建
+- `rt_thread_delay()` — 延时
+- `rt_kprintf()` — 串口输出
+
+### 下一步重点：线程间通信（IPC）
+
+| 机制 | 用途 | 本项目可应用的场景 |
+|------|------|-------------------|
+| 信号量 `rt_sem` | 线程同步、事件通知 | USB 收到数据 → 释放信号量 → dap_thread 醒来处理 |
+| 互斥锁 `rt_mutex` | 保护共享资源 | 多个线程访问 JTAG GPIO 时的互斥 |
+| 消息队列 `rt_mq` | 线程间传数据 | dap_thread 把 JTAG 命令放入队列，jtag_thread 取出执行 |
+
+### 之后：设备驱动框架
+
+```c
+rt_device_t dev = rt_device_find("uart1");
+rt_device_open(dev, RT_DEVICE_FLAG_RDWR);
+rt_device_write(dev, 0, "hello", 5);
+```
+
+本项目已用 `rt_console_set_device("usart1")` 注册控制台。可进一步把 `jtag_driver.c` 封装成 RT-Thread 设备模型。
+
+### 再之后：组件生态
+
+```
+CherryUSB (已用) → FATFS (文件系统) → lwIP (TCP/IP) → ...
+```
+
+### 推荐实践
+
+先把 TODO 列表里的**"USB 回调线程化"**做了——这个改动小（20 行代码），但能让你真正理解：
+1. 信号量的 create / take / release 生命周期
+2. 中断上下文 vs 线程上下文的区别
+3. 为什么 RTOS 里不应该在中断回调里做复杂操作
